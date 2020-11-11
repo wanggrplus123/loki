@@ -112,14 +112,20 @@ type Client interface {
 	api.EntryHandler
 	// Stop goroutine sending batch of entries.
 	Stop()
+
+	// Stop goroutine sending batch of entries without retries.
+	StopNow()
 }
 
 // Client for pushing logs in snappy-compressed protos over HTTP.
 type client struct {
-	logger  log.Logger
-	cfg     Config
-	client  *http.Client
-	quit    chan struct{}
+	logger log.Logger
+	cfg    Config
+	client *http.Client
+
+	// quit chan is depricated. Will be removed. Use `client.ctx` and `client.cancel` instead.
+	quit chan struct{}
+
 	once    sync.Once
 	entries chan entry
 	wg      sync.WaitGroup
@@ -356,11 +362,15 @@ func (c *client) getTenantID(labels model.LabelSet) string {
 
 // Stop the client.
 func (c *client) Stop() {
-	// cancel any upstream calls made using client's `ctx`.
-	c.cancel()
-
 	c.once.Do(func() { close(c.quit) })
 	c.wg.Wait()
+}
+
+// StopNow stops the client without retries
+func (c *client) StopNow() {
+	// cancel any upstream calls made using client's `ctx`.
+	c.cancel()
+	c.Stop()
 }
 
 // Handle implement EntryHandler; adds a new line to the next batch; send is async.
